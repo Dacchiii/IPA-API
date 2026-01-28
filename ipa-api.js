@@ -1,101 +1,105 @@
-// ipa-api.js v0.2
-// 1-file IPA API using ScriptProcessorNode (GitHub Pages / HTTPS safe)
-// Focus: energy + zero-crossing + simple spectrum bands
-
 (() => {
   const IPA = {};
-  let ctx, source, processor;
 
-  IPA._segments = [];
+  let audioCtx = null;
+  let processor = null;
+  let source = null;
 
-  // ==== Utility ==== 
+  let ipaBuffer = "";
+  let lastIPA = "";
+
+  const FRAME_SIZE = 2048;
+  const SILENCE = 0.01;
+
+  /* ====== public API ====== */
+
+  IPA.start = async function () {
+    if (audioCtx) return;
+
+    audioCtx = new AudioContext();
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    source = audioCtx.createMediaStreamSource(stream);
+
+    processor = audioCtx.createScriptProcessor(FRAME_SIZE, 1, 1);
+    source.connect(processor);
+    processor.connect(audioCtx.destination);
+
+    processor.onaudioprocess = e => {
+      const frame = e.inputBuffer.getChannelData(0);
+      processFrame(frame, audioCtx.sampleRate);
+    };
+  };
+
+  IPA.render = function () {
+    return `[${ipaBuffer}]`;
+  };
+
+  IPA.clear = function () {
+    ipaBuffer = "";
+    lastIPA = "";
+  };
+
+  /* ====== signal processing ====== */
+
   function rms(buf) {
     let s = 0;
     for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
     return Math.sqrt(s / buf.length);
   }
 
-  function zeroCrossingRate(buf) {
+  function zeroCrossingRate(buf, sampleRate) {
     let c = 0;
     for (let i = 1; i < buf.length; i++) {
-      if (buf[i - 1] * buf[i] < 0) c++;
+      if (buf[i - 1] <= 0 && buf[i] > 0) c++;
     }
-    return c / buf.length;
+    return c * sampleRate / buf.length;
   }
 
-  function spectrumBands(buf) {
-    // very rough DFT (slow but simple, v0.2)
-    const N = buf.length;
-    const bands = { low: 0, mid: 0, high: 0 };
-
-    for (let k = 1; k < N / 2; k++) {
-      let re = 0, im = 0;
-      for (let n = 0; n < N; n++) {
-        const a = 2 * Math.PI * k * n / N;
-        re += buf[n] * Math.cos(a);
-        im -= buf[n] * Math.sin(a);
-      }
-      const mag = Math.sqrt(re * re + im * im);
-
-      if (k < N * 0.05) bands.low += mag;
-      else if (k < N * 0.15) bands.mid += mag;
-      else bands.high += mag;
+  function roughNoise(buf) {
+    let d = 0;
+    for (let i = 1; i < buf.length; i++) {
+      d += Math.abs(buf[i] - buf[i - 1]);
     }
-    return bands;
+    return d / buf.length;
   }
 
-  // ==== Core classification ==== 
-  function classify(buf) {
-    const e = rms(buf);
-    if (e < 0.01) return null; // silence
+  /* ====== IPA classification ====== */
 
-    const zcr = zeroCrossingRate(buf);
-    const bands = spectrumBands(buf);
+  function classify(frame, sampleRate) {
+    const v = rms(frame);
+    if (v < SILENCE) return "";
 
-    // vowel vs consonant (very rough)
-    const isVowel = zcr < 0.15;
+    const zcr = zeroCrossingRate(frame, sampleRate);
+    const noise = roughNoise(frame);
 
-    if (isVowel) {
-      // vowel space (rough)
-      if (bands.high > bands.mid && bands.high > bands.low) return { base: 'i' };
-      if (bands.low > bands.mid && bands.low > bands.high) return { base: 'u' };
-      if (bands.mid > bands.high && bands.mid > bands.low) return { base: 'a' };
-      return { base: 'ə' };
-    } else {
-      // consonant (placeholder)
-      return { base: 'h' };
+    // 摩擦音
+    if (noise > 0.12) {
+      if (zcr > 3000) return "s";
+      return "h";
     }
+
+    // 鼻音（かなり荒い）
+    if (zcr < 800) return "ŋ";
+
+    // 母音（仮）
+    if (zcr > 2200) return "i";
+    if (zcr > 1800) return "e";
+    if (zcr > 1400) return "a";
+    if (zcr > 1100) return "o";
+    return "ɯ";
   }
 
-  // ==== Audio callback ==== 
-  function onAudio(buf) {
-    const seg = classify(buf);
-    if (seg) IPA._segments.push(seg);
+  /* ====== frame handler ====== */
+
+  function processFrame(frame, sampleRate) {
+    const ipa = classify(frame, sampleRate);
+    if (!ipa || ipa === lastIPA) return;
+
+    ipaBuffer += ipa;
+    lastIPA = ipa;
   }
 
-  // ==== Public API ==== 
-  IPA.start = async () => {
-    ctx = new AudioContext();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    source = ctx.createMediaStreamSource(stream);
-
-    processor = ctx.createScriptProcessor(1024, 1, 1);
-    source.connect(processor);
-    processor.connect(ctx.destination);
-
-    processor.onaudioprocess = e => {
-      const buf = e.inputBuffer.getChannelData(0);
-      onAudio(buf);
-    };
-  };
-
-  IPA.render = () => {
-    return '[' + IPA._segments.map(s => s.base).join('') + ']';
-  };
-
-  IPA.clear = () => {
-    IPA._segments.length = 0;
-  };
-
+  /* expose */
   window.IPA = IPA;
 })();
