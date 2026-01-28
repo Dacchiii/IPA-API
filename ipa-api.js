@@ -1,74 +1,100 @@
-// ipa-api.js
+// ipa-api.js v0.2
+// 1-file IPA API using ScriptProcessorNode (GitHub Pages / HTTPS safe)
+// Focus: energy + zero-crossing + simple spectrum bands
+
 (() => {
   const IPA = {};
-  let ctx, source, node;
+  let ctx, source, processor;
 
-  // ==== AudioWorklet を1ファイルに押し込む ====
-  const workletCode = `
-  class IPAProcessor extends AudioWorkletProcessor {
-    process(inputs) {
-      const input = inputs[0];
-      if (input && input[0]) {
-        this.port.postMessage(input[0].slice());
+  IPA._segments = [];
+
+  // ==== Utility ==== 
+  function rms(buf) {
+    let s = 0;
+    for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    return Math.sqrt(s / buf.length);
+  }
+
+  function zeroCrossingRate(buf) {
+    let c = 0;
+    for (let i = 1; i < buf.length; i++) {
+      if (buf[i - 1] * buf[i] < 0) c++;
+    }
+    return c / buf.length;
+  }
+
+  function spectrumBands(buf) {
+    // very rough DFT (slow but simple, v0.2)
+    const N = buf.length;
+    const bands = { low: 0, mid: 0, high: 0 };
+
+    for (let k = 1; k < N / 2; k++) {
+      let re = 0, im = 0;
+      for (let n = 0; n < N; n++) {
+        const a = 2 * Math.PI * k * n / N;
+        re += buf[n] * Math.cos(a);
+        im -= buf[n] * Math.sin(a);
       }
-      return true;
+      const mag = Math.sqrt(re * re + im * im);
+
+      if (k < N * 0.05) bands.low += mag;
+      else if (k < N * 0.15) bands.mid += mag;
+      else bands.high += mag;
+    }
+    return bands;
+  }
+
+  // ==== Core classification ==== 
+  function classify(buf) {
+    const e = rms(buf);
+    if (e < 0.01) return null; // silence
+
+    const zcr = zeroCrossingRate(buf);
+    const bands = spectrumBands(buf);
+
+    // vowel vs consonant (very rough)
+    const isVowel = zcr < 0.15;
+
+    if (isVowel) {
+      // vowel space (rough)
+      if (bands.high > bands.mid && bands.high > bands.low) return { base: 'i' };
+      if (bands.low > bands.mid && bands.low > bands.high) return { base: 'u' };
+      if (bands.mid > bands.high && bands.mid > bands.low) return { base: 'a' };
+      return { base: 'ə' };
+    } else {
+      // consonant (placeholder)
+      return { base: 'h' };
     }
   }
-  registerProcessor("ipa-processor", IPAProcessor);
-  `;
 
-  async function setupAudio() {
+  // ==== Audio callback ==== 
+  function onAudio(buf) {
+    const seg = classify(buf);
+    if (seg) IPA._segments.push(seg);
+  }
+
+  // ==== Public API ==== 
+  IPA.start = async () => {
     ctx = new AudioContext();
-
-    const blob = new Blob([workletCode], { type: "application/javascript" });
-    const url = URL.createObjectURL(blob);
-    await ctx.audioWorklet.addModule(url);
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     source = ctx.createMediaStreamSource(stream);
 
-    node = new AudioWorkletNode(ctx, "ipa-processor");
-    source.connect(node);
+    processor = ctx.createScriptProcessor(1024, 1, 1);
+    source.connect(processor);
+    processor.connect(ctx.destination);
 
-    node.port.onmessage = e => {
-      const float32 = e.data;
-      handleAudio(float32, ctx.sampleRate);
+    processor.onaudioprocess = e => {
+      const buf = e.inputBuffer.getChannelData(0);
+      onAudio(buf);
     };
-  }
-
-  // ==== 超簡易 音声→IPA（仮） ====
-  function handleAudio(float32, sampleRate) {
-    // エネルギー（無音カット）
-    let energy = 0;
-    for (let i = 0; i < float32.length; i++) {
-      energy += Math.abs(float32[i]);
-    }
-    energy /= float32.length;
-    if (energy < 0.01) return;
-
-    // 超雑な分類（後でFSM化）
-    let ipa = "a";
-    if (energy < 0.05) ipa = "h";
-    else if (energy < 0.1) ipa = "ə";
-    else if (energy < 0.2) ipa = "a";
-
-    IPA._buffer.push({ base: ipa });
-  }
-
-  // ==== 出力 ====
-  IPA._buffer = [];
+  };
 
   IPA.render = () => {
-    return "[" + IPA._buffer.map(s => s.base).join("") + "]";
+    return '[' + IPA._segments.map(s => s.base).join('') + ']';
   };
 
   IPA.clear = () => {
-    IPA._buffer.length = 0;
-  };
-
-  IPA.start = async () => {
-    if (!ctx) await setupAudio();
-    await ctx.resume();
+    IPA._segments.length = 0;
   };
 
   window.IPA = IPA;
