@@ -1,105 +1,101 @@
 (() => {
   const IPA = {};
 
-  let audioCtx = null;
-  let processor = null;
-  let source = null;
+  let audioCtx, source, processor;
 
-  let ipaBuffer = "";
-  let lastIPA = "";
+  let buffer = "";
+  let state = "silence";
 
-  const FRAME_SIZE = 2048;
-  const SILENCE = 0.01;
+  const FRAME = 2048;
+  const SILENCE_TH = 0.01;
 
-  /* ====== public API ====== */
+  /* ===== public ===== */
 
-  IPA.start = async function () {
+  IPA.start = async () => {
     if (audioCtx) return;
 
     audioCtx = new AudioContext();
-
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     source = audioCtx.createMediaStreamSource(stream);
 
-    processor = audioCtx.createScriptProcessor(FRAME_SIZE, 1, 1);
+    processor = audioCtx.createScriptProcessor(FRAME, 1, 1);
     source.connect(processor);
     processor.connect(audioCtx.destination);
 
     processor.onaudioprocess = e => {
       const frame = e.inputBuffer.getChannelData(0);
-      processFrame(frame, audioCtx.sampleRate);
+      const feat = extractFeatures(frame, audioCtx.sampleRate);
+      stepFSM(feat);
     };
   };
 
-  IPA.render = function () {
-    return `[${ipaBuffer}]`;
-  };
+  IPA.render = () => `[${buffer}]`;
+  IPA.clear = () => { buffer = ""; state = "silence"; };
 
-  IPA.clear = function () {
-    ipaBuffer = "";
-    lastIPA = "";
-  };
+  /* ===== feature extraction ===== */
 
-  /* ====== signal processing ====== */
+  function extractFeatures(buf, sr) {
+    let sum = 0, zc = 0, diff = 0;
 
-  function rms(buf) {
-    let s = 0;
-    for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
-    return Math.sqrt(s / buf.length);
-  }
-
-  function zeroCrossingRate(buf, sampleRate) {
-    let c = 0;
-    for (let i = 1; i < buf.length; i++) {
-      if (buf[i - 1] <= 0 && buf[i] > 0) c++;
-    }
-    return c * sampleRate / buf.length;
-  }
-
-  function roughNoise(buf) {
-    let d = 0;
-    for (let i = 1; i < buf.length; i++) {
-      d += Math.abs(buf[i] - buf[i - 1]);
-    }
-    return d / buf.length;
-  }
-
-  /* ====== IPA classification ====== */
-
-  function classify(frame, sampleRate) {
-    const v = rms(frame);
-    if (v < SILENCE) return "";
-
-    const zcr = zeroCrossingRate(frame, sampleRate);
-    const noise = roughNoise(frame);
-
-    // 摩擦音
-    if (noise > 0.12) {
-      if (zcr > 3000) return "s";
-      return "h";
+    for (let i = 0; i < buf.length; i++) {
+      sum += buf[i] * buf[i];
+      if (i > 0) {
+        if (buf[i - 1] <= 0 && buf[i] > 0) zc++;
+        diff += Math.abs(buf[i] - buf[i - 1]);
+      }
     }
 
-    // 鼻音（かなり荒い）
-    if (zcr < 800) return "ŋ";
+    return {
+      volume: Math.sqrt(sum / buf.length),
+      zcr: zc * sr / buf.length,
+      noise: diff / buf.length
+    };
+  }
 
-    // 母音（仮）
-    if (zcr > 2200) return "i";
-    if (zcr > 1800) return "e";
-    if (zcr > 1400) return "a";
-    if (zcr > 1100) return "o";
+  /* ===== FSM ===== */
+
+  function stepFSM(f) {
+    switch (state) {
+      case "silence":
+        if (f.volume > SILENCE_TH) {
+          if (f.noise > 0.12) {
+            state = "fricative";
+            buffer += pickFricative(f);
+          } else {
+            state = "vowel";
+            buffer += pickVowel(f);
+          }
+        }
+        break;
+
+      case "vowel":
+        if (f.volume < SILENCE_TH) {
+          state = "silence";
+        }
+        break;
+
+      case "fricative":
+        if (f.volume < SILENCE_TH) {
+          state = "silence";
+        }
+        break;
+    }
+  }
+
+  /* ===== IPA selection (まだ荒くてOK) ===== */
+
+  function pickVowel(f) {
+    if (f.zcr > 2200) return "i";
+    if (f.zcr > 1800) return "e";
+    if (f.zcr > 1400) return "a";
+    if (f.zcr > 1100) return "o";
     return "ɯ";
   }
 
-  /* ====== frame handler ====== */
-
-  function processFrame(frame, sampleRate) {
-    const ipa = classify(frame, sampleRate);
-    if (!ipa || ipa === lastIPA) return;
-
-    ipaBuffer += ipa;
-    lastIPA = ipa;
+  function pickFricative(f) {
+    if (f.zcr > 3000) return "s";
+    return "h";
   }
 
-  /* expose */
   window.IPA = IPA;
 })();
