@@ -17,12 +17,11 @@
   <script src="ipa-api.js"></script>
   <script>
     let isRecording = false;
-    document.getElementById("start").onclick = async () => {await IPA.start(); isRecording = true;};
+    document.getElementById("start").onclick = async () => {await IPA.start(); isRecording = true; await sleep(100);};
 
     while(isRecording === true) {document.getElementById("out").textContent = IPA.render();};
 
-    document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";
-    };
+    document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";};
   </script>
 </body>
 </html>
