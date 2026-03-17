@@ -7,7 +7,6 @@
   const FRAME = 2048;
   const SILENCE_TH = 0.01;
 
-  /* ===== public API ===== */
   IPA.start = async () => {
     if (audioCtx) return;
     audioCtx = new AudioContext();
@@ -21,13 +20,14 @@
       const frame = e.inputBuffer.getChannelData(0);
       const feat = extractFeatures(frame, audioCtx.sampleRate);
       stepFSM(feat);
+
+      buffer += "*";
     };
   };
 
   IPA.render = () => `[${buffer}]`;
   IPA.clear = () => { buffer = ""; state = "silence"; };
 
-  /* ===== feature extraction ===== */
   function extractFeatures(buf, sr) {
     let sum = 0, zc = 0, diff = 0;
     for (let i = 0; i < buf.length; i++) {
@@ -37,7 +37,6 @@
     return { volume: Math.sqrt(sum/buf.length), zcr: zc*sr/buf.length, noise: diff/buf.length };
   }
 
-  /* ===== FSM ===== */
   function stepFSM(f) {
     switch(state){
       case "silence":
@@ -58,7 +57,6 @@
     }
   }
 
-  /* ===== IPA selection ===== */
   function pickVowel(f){
     const z=f.zcr;
     if(z>2500) return "i";
@@ -92,11 +90,11 @@
 
   function pickDiacritic(f, last){
     let out = "";
-    // 長音っぽい場合
+    // 長音
     if(f.volume>0.2) out+="ː";
-    // 鼻音化っぽい場合
+    // 鼻音化
     if(last==="a"||last==="o"||last==="e") out+="̃";
-    // 母音無声化っぽい
+    // 母音無声化
     if(f.zcr>4000) out+="̥";
     return out;
   }
