@@ -11,23 +11,17 @@
 <body>
   <div style="position:fixed; top: 0; height: 10vh;">
     <button id="start">録音開始</button>
-    <button id="show">IPA表示</button>
     <button id="clear">クリア</button>
   </div>
   <pre id="out" style="display:flex; buttom:0; max-height:90vh; max-width:100vw; max-width:100dvw; overflow-wrap:break-word; word-break:break-all; min-width:0; white-space: pre-wrap;"></pre>
   <script src="ipa-api.js"></script>
   <script>
-    document.getElementById("start").onclick = async () => {
-      await IPA.start();
-    };
+    let isRecording = false;
+    document.getElementById("start").onclick = async () => {await IPA.start(); isRecording = true;};
 
-    document.getElementById("show").onclick = () => {
-      document.getElementById("out").textContent = IPA.render();
-    };
+    while(isRecording === true) {document.getElementById("out").textContent = IPA.render();};
 
-    document.getElementById("clear").onclick = () => {
-      IPA.clear();
-      document.getElementById("out").textContent = "";
+    document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";
     };
   </script>
 </body>
