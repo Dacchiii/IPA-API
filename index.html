@@ -18,8 +18,8 @@
   <script>
     function sleep(ms) {return new Promise(resolve => setTimeout(resolve, ms));}
     let isRecording = false;
-    const startRecording = async () => {while(isRecording) {isRecording = true; document.getElementById("out").textContent = IPA.render(); await sleep(100)};}
-    document.getElementById("start").onclick = async () => {await IPA.start(); startRecording()};
+    const startRecording = async () => {while(isRecording) {document.getElementById("out").textContent = IPA.render(); await sleep(100)};}
+    document.getElementById("start").onclick = async () => {await IPA.start(); await startRecording()};
     document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";};
   </script>
 </body>
