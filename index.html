@@ -1,26 +1,26 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
-  <title>IPA API test</title>
-  <style>
-    body {display:flex; flex-direction:column;}
-  </style>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0">
+ <title>IPA API test</title>
+ <style>
+  body {display:flex; flex-direction:column;}
+ </style>
 </head>
 <body>
-  <div style="position:fixed; top: 0; height: 10vh;">
-    <button id="start">録音開始</button>
-    <button id="clear">クリア</button>
-  </div>
-  <pre id="out" style="display:flex; buttom:0; max-height:90vh; max-width:100vw; max-width:100dvw; overflow-wrap:break-word; word-break:break-all; min-width:0; white-space: pre-wrap;"></pre>
-  <script src="ipa-api.js"></script>
-  <script>
-    function sleep(ms) {return new Promise(resolve => setTimeout(resolve, ms));}
-    let isRecording = false;
-    const startRecording = async () => {while(isRecording) {document.getElementById("out").textContent = IPA.render(); await sleep(100)};}
-    document.getElementById("start").onclick = async () => {await IPA.start(); await startRecording()};
-    document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";};
-  </script>
+ <div style="position:fixed; top: 0; height: 10vh;">
+  <button id="start">録音開始</button>
+  <button id="clear">クリア</button>
+ </div>
+ <pre id="out" style="display:flex; position: absolute; top: 10vh; max-height:90vh; max-width:100vw; max-width:100dvw; overflow-wrap:break-word; word-break:break-all; min-width:0; white-space: pre-wrap;"></pre>
+ <script src="ipa-api.js"></script>
+ <script>
+  function sleep(ms) {return new Promise(resolve => setTimeout(resolve, ms));}
+  let isRecording = false;
+  const startRecording = async () => {while(isRecording) {document.getElementById("out").textContent = IPA.render(); await sleep(100)};}
+  document.getElementById("start").onclick = async () => {isRecording = true; IPA.start(); await startRecording()};
+  document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";};
+ </script>
 </body>
 </html>
