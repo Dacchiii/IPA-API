@@ -21,7 +21,7 @@
   let isRecording = false;
   const startRecording = async () => {while(isRecording) {document.getElementById("out").textContent = IPA.render(); await sleep(100)};}
   document.getElementById("start").onclick = async () => {isRecording = true; IPA.start(); await startRecording()};
-  document.getElementById("stop").onclick = () => {IPA.clear(); isRecording = false;};
+  document.getElementById("stop").onclick = () => {IPA.stop(); isRecording = false;};
   document.getElementById("clear").onclick = () => {IPA.clear(); isRecording = false; document.getElementById("out").textContent = "";};
  </script>
 </body>

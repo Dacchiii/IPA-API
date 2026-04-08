@@ -29,6 +29,7 @@
  };
 
  IPA.render = () => `[${buffer}]`;
+ IPA.stop = () => {state = "silence";}
  IPA.clear = () => { buffer = ""; state = "silence"; };
 
  function extractFeatures(buf, sr) {
