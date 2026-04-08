@@ -13,7 +13,7 @@
  }
 
  IPA.start = async () => {
-  if (!audioCtx) {audioCTX = new AudioContext(); return;}
+  if (!audioCtx) {audioCtx = new AudioContext(); return;}
   state = "silence"
   audioCtx = new AudioContext();
   const stream = await navigator.mediaDevices.getUserMedia({audio: true});
