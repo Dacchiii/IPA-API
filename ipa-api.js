@@ -15,7 +15,7 @@
  IPA.start = async () => {
   if (audioCtx) return;
   audioCtx = new AudioContext();
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const stream = await navigator.mediaDevices.getUserMedia({audio: true});
   source = audioCtx.createMediaStreamSource(stream);
   processor = audioCtx.createScriptProcessor(FRAME, 1, 1);
   source.connect(processor);
